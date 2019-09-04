@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	mongo := &mongodb.Config{
+	mongo := &mongodb.Opt{
 		Url:             "mongodb://127.0.0.1:37017",
 		Database:        "admin_request_log",
 		MaxConnIdleTime: 5,
@@ -18,9 +18,9 @@ func main() {
 		Password:        "",
 	}
 
-	mongo.NewClient()
+	client := mongo.NewClient()
 
-	res := mongo.Collection("request_log").InsertOne(bson.M{"name": "pi", "value": 3.14159})
+	res := client.Collection("request_log").InsertOne(bson.M{"name": "pi", "value": 3.14159})
 
 	fmt.Println(res)
 
@@ -28,7 +28,7 @@ func main() {
 		Value float64
 	}
 
-	err := mongo.Collection("request_log").Where(bson.M{"name": "pi"}).FindOne(&result)
+	err := client.Collection("request_log").Where(bson.M{"name": "pi"}).FindOne(&result)
 	if err != nil {
 		fmt.Println(err)
 	}

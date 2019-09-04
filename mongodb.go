@@ -12,7 +12,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var client *mongo.Client
+type MongoDBClient struct {
+	mgclient *mongo.Client
+	mgopt    *Opt
+}
+
+// var client *mongo.Client
 
 type collection struct {
 	Database *mongo.Database
@@ -25,7 +30,7 @@ type collection struct {
 }
 
 //Config .
-type Config struct {
+type Opt struct {
 	Url             string
 	Database        string
 	MaxConnIdleTime int
@@ -35,16 +40,16 @@ type Config struct {
 }
 
 // NewClient 启动MongoDB
-func (config *Config) NewClient() {
+func (opt *Opt) NewClient() *MongoDBClient {
 	var err error
 	mongoOptions := options.Client()
 
-	mongoOptions.SetMaxConnIdleTime(time.Duration(config.MaxConnIdleTime) * time.Second)
-	mongoOptions.SetMaxPoolSize(uint64(config.MaxPoolSize))
-	if config.Username != "" && config.Password != "" {
-		mongoOptions.SetAuth(options.Credential{Username: config.Username, Password: config.Password})
+	mongoOptions.SetMaxConnIdleTime(time.Duration(opt.MaxConnIdleTime) * time.Second)
+	mongoOptions.SetMaxPoolSize(uint64(opt.MaxPoolSize))
+	if opt.Username != "" && opt.Password != "" {
+		mongoOptions.SetAuth(options.Credential{Username: opt.Username, Password: opt.Password})
 	}
-	client, err = mongo.NewClient(mongoOptions.ApplyURI(config.Url))
+	client, err := mongo.NewClient(mongoOptions.ApplyURI(opt.Url))
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -53,11 +58,21 @@ func (config *Config) NewClient() {
 	if err != nil {
 		log.Fatalln(err)
 	}
+
+	return &MongoDBClient{mgclient: client, mgopt: opt}
+}
+
+func (collection *collection) reset() {
+	collection.filter = nil
+	collection.limit = 0
+	collection.skip = 0
+	collection.sort = nil
+	collection.fields = nil
 }
 
 // Collection 得到一个mongo操作对象
-func (config *Config) Collection(table string) *collection {
-	database := client.Database(config.Database)
+func (client *MongoDBClient) Collection(table string) *collection {
+	database := client.mgclient.Database(client.mgopt.Database)
 	return &collection{
 		Database: database,
 		Table:    database.Collection(table),
@@ -102,6 +117,7 @@ func (collection *collection) InsertOne(document interface{}) *mongo.InsertOneRe
 	if err != nil {
 		log.Println(err)
 	}
+	collection.reset()
 	return result
 }
 
@@ -114,6 +130,7 @@ func (collection *collection) InsertMany(documents interface{}) *mongo.InsertMan
 	if err != nil {
 		log.Println(err)
 	}
+	collection.reset()
 	return result
 }
 
@@ -125,6 +142,7 @@ func (collection *collection) UpdateOrInsert(documents []interface{}) *mongo.Upd
 	if err != nil {
 		log.Println(err)
 	}
+	collection.reset()
 	return result
 }
 
@@ -135,6 +153,7 @@ func (collection *collection) UpdateOne(document interface{}) *mongo.UpdateResul
 	if err != nil {
 		log.Println(err)
 	}
+	collection.reset()
 	return result
 }
 
@@ -145,6 +164,7 @@ func (collection *collection) UpdateMany(document interface{}) *mongo.UpdateResu
 	if err != nil {
 		log.Println(err)
 	}
+	collection.reset()
 	return result
 }
 
@@ -161,6 +181,7 @@ func (collection *collection) FindOne(document interface{}) error {
 		log.Println(err)
 		return err
 	}
+	collection.reset()
 	return nil
 }
 
@@ -211,6 +232,7 @@ func (collection *collection) Delete() int64 {
 	if err != nil {
 		log.Println(err)
 	}
+	collection.reset()
 	return result.DeletedCount
 }
 
@@ -221,6 +243,7 @@ func (collection *collection) Count() int64 {
 		log.Println(err)
 		return 0
 	}
+	collection.reset()
 	return result
 }
 
