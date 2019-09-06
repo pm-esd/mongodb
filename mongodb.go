@@ -13,8 +13,8 @@ import (
 )
 
 type MongoDBClient struct {
-	mgclient *mongo.Client
-	mgopt    *Opt
+	Client *mongo.Client
+	Opt    *Opt
 }
 
 // var client *mongo.Client
@@ -59,7 +59,7 @@ func (opt *Opt) NewClient() *MongoDBClient {
 		log.Fatalln(err)
 	}
 
-	return &MongoDBClient{mgclient: client, mgopt: opt}
+	return &MongoDBClient{Client: client, Opt: opt}
 }
 
 func (collection *collection) reset() {
@@ -72,7 +72,7 @@ func (collection *collection) reset() {
 
 // Collection 得到一个mongo操作对象
 func (client *MongoDBClient) Collection(table string) *collection {
-	database := client.mgclient.Database(client.mgopt.Database)
+	database := client.Client.Database(client.Opt.Database)
 	return &collection{
 		Database: database,
 		Table:    database.Collection(table),
