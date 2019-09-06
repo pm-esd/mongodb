@@ -111,61 +111,49 @@ func (collection *collection) Fields(fields bson.M) *collection {
 }
 
 // 写入单条数据
-func (collection *collection) InsertOne(document interface{}) *mongo.InsertOneResult {
+func (collection *collection) InsertOne(document interface{}) (*mongo.InsertOneResult, error) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	result, err := collection.Table.InsertOne(ctx, BeforeCreate(document))
-	if err != nil {
-		log.Println(err)
-	}
+
 	collection.reset()
-	return result
+	return result, err
 }
 
 // 写入多条数据
-func (collection *collection) InsertMany(documents interface{}) *mongo.InsertManyResult {
+func (collection *collection) InsertMany(documents interface{}) (*mongo.InsertManyResult, error) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	var data []interface{}
 	data = BeforeCreate(documents).([]interface{})
 	result, err := collection.Table.InsertMany(ctx, data)
-	if err != nil {
-		log.Println(err)
-	}
 	collection.reset()
-	return result
+	return result, err
 }
 
 // 存在更新,不存在写入, documents 里边的文档需要有 _id 的存在
-func (collection *collection) UpdateOrInsert(documents []interface{}) *mongo.UpdateResult {
+func (collection *collection) UpdateOrInsert(documents []interface{}) (*mongo.UpdateResult, error) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	var upsert = true
 	result, err := collection.Table.UpdateMany(ctx, documents, &options.UpdateOptions{Upsert: &upsert})
-	if err != nil {
-		log.Println(err)
-	}
 	collection.reset()
-	return result
+	return result, err
 }
 
 //
-func (collection *collection) UpdateOne(document interface{}) *mongo.UpdateResult {
+func (collection *collection) UpdateOne(document interface{}) (*mongo.UpdateResult, error) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	result, err := collection.Table.UpdateOne(ctx, collection.filter, bson.M{"$set": BeforeUpdate(document)})
-	if err != nil {
-		log.Println(err)
-	}
+
 	collection.reset()
-	return result
+	return result, err
 }
 
 //
-func (collection *collection) UpdateMany(document interface{}) *mongo.UpdateResult {
+func (collection *collection) UpdateMany(document interface{}) (*mongo.UpdateResult, error) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	result, err := collection.Table.UpdateMany(ctx, collection.filter, bson.M{"$set": BeforeUpdate(document)})
-	if err != nil {
-		log.Println(err)
-	}
+
 	collection.reset()
-	return result
+	return result, err
 }
 
 // 查询一条数据
