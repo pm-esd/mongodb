@@ -264,8 +264,8 @@ func BeforeCreate(document interface{}) interface{} {
 			dataVal.SetMapIndex(reflect.ValueOf("_id"), reflect.ValueOf(primitive.NewObjectID().String()))
 		}
 
-		dataVal.SetMapIndex(reflect.ValueOf("created_at"), reflect.ValueOf(time.Now().Unix()))
-		dataVal.SetMapIndex(reflect.ValueOf("updated_at"), reflect.ValueOf(time.Now().Unix()))
+		// dataVal.SetMapIndex(reflect.ValueOf("created_at"), reflect.ValueOf(time.Now().Unix()))
+		// dataVal.SetMapIndex(reflect.ValueOf("updated_at"), reflect.ValueOf(time.Now().Unix()))
 		return dataVal.Interface()
 
 	default:
@@ -273,8 +273,8 @@ func BeforeCreate(document interface{}) interface{} {
 			if !val.MapIndex(reflect.ValueOf("_id")).IsValid() {
 				val.SetMapIndex(reflect.ValueOf("_id"), reflect.ValueOf(primitive.NewObjectID()))
 			}
-			val.SetMapIndex(reflect.ValueOf("created_at"), reflect.ValueOf(time.Now().Unix()))
-			val.SetMapIndex(reflect.ValueOf("updated_at"), reflect.ValueOf(time.Now().Unix()))
+			// val.SetMapIndex(reflect.ValueOf("created_at"), reflect.ValueOf(time.Now().Unix()))
+			// val.SetMapIndex(reflect.ValueOf("updated_at"), reflect.ValueOf(time.Now().Unix()))
 		}
 		return val.Interface()
 	}
@@ -302,12 +302,12 @@ func BeforeUpdate(document interface{}) interface{} {
 			}
 		}
 		dataVal := reflect.ValueOf(data)
-		dataVal.SetMapIndex(reflect.ValueOf("updated_at"), reflect.ValueOf(time.Now().Unix()))
+		// dataVal.SetMapIndex(reflect.ValueOf("updated_at"), reflect.ValueOf(time.Now().Unix()))
 		return dataVal.Interface()
 
 	default:
 		if val.Type() == reflect.TypeOf(bson.M{}) {
-			val.SetMapIndex(reflect.ValueOf("updated_at"), reflect.ValueOf(time.Now().Unix()))
+			// val.SetMapIndex(reflect.ValueOf("updated_at"), reflect.ValueOf(time.Now().Unix()))
 		}
 		return val.Interface()
 	}
