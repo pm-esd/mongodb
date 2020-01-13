@@ -2,6 +2,7 @@ package mongodb
 
 import (
 	"context"
+	"errors"
 	"log"
 	"reflect"
 	"time"
@@ -68,6 +69,7 @@ func (collection *collection) reset() {
 	collection.skip = 0
 	collection.sort = nil
 	collection.fields = nil
+	collection.Table = nil
 }
 
 // Collection 得到一个mongo操作对象
@@ -110,6 +112,35 @@ func (collection *collection) Fields(fields bson.M) *collection {
 	return collection
 }
 
+//CreateManyIndex 多字段创建index索引
+func (c *collection) CreateManyIndex(keys map[string]interface{}) (res []string, err error) {
+	ctx := context.Background()
+	indexView := c.Table.Indexes()
+	indexModels := make([]mongo.IndexModel, len(keys))
+	j := 0
+	for i, v := range keys {
+		key := map[string]interface{}{i: v}
+		indexModels[j] = mongo.IndexModel{
+			Keys: key,
+		}
+		j++
+	}
+	res, err = indexView.CreateMany(ctx, indexModels)
+	return
+}
+
+// 单字段创建唯一索引
+func (collection *collection) CreateUniqueIndex(keys map[string]interface{}) (res string, err error) {
+	ctx := context.Background()
+	unique := true
+	indexView := collection.Table.Indexes()
+	option := options.Index()
+	option.Unique = &unique
+	indexModel := mongo.IndexModel{Keys: keys, Options: option}
+	res, err = indexView.CreateOne(ctx, indexModel)
+	return
+}
+
 // 写入单条数据
 func (collection *collection) InsertOne(document interface{}) (*mongo.InsertOneResult, error) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
@@ -129,12 +160,32 @@ func (collection *collection) InsertMany(documents interface{}) (*mongo.InsertMa
 	return result, err
 }
 
+func (collection *collection) Aggregate(pipeline interface{}, result interface{}) (err error) {
+	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	cursor, err := collection.Table.Aggregate(ctx, pipeline)
+	if err != nil {
+		collection.reset()
+		log.Println(err)
+		return
+	}
+	err = cursor.All(ctx, result)
+	if err != nil {
+		collection.reset()
+		log.Println(err)
+		return
+	}
+	collection.reset()
+	return
+}
+
 // 存在更新,不存在写入, documents 里边的文档需要有 _id 的存在
 func (collection *collection) UpdateOrInsert(documents []interface{}) (*mongo.UpdateResult, error) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	var upsert = true
-	result, err := collection.Table.UpdateMany(ctx, documents, &options.UpdateOptions{Upsert: &upsert})
-	collection.reset()
+	result, err := collection.Table.UpdateMany(ctx, collection.filter, documents, &options.UpdateOptions{Upsert: &upsert})
+	if err != nil {
+		log.Println(err)
+	}
 	return result, err
 }
 
@@ -145,6 +196,16 @@ func (collection *collection) UpdateOne(document interface{}) (*mongo.UpdateResu
 
 	collection.reset()
 	return result, err
+}
+
+//原生update
+func (collection *collection) UpdateOneRaw(document interface{}, opt ...*options.UpdateOptions) *mongo.UpdateResult {
+	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	result, err := collection.Table.UpdateOne(ctx, collection.filter, document, opt...)
+	if err != nil {
+		log.Println(err)
+	}
+	return result
 }
 
 //
@@ -174,7 +235,7 @@ func (collection *collection) FindOne(document interface{}) error {
 }
 
 // 查询多条数据
-func (collection *collection) FindMany(documents interface{}) {
+func (collection *collection) FindMany(documents interface{}) (err error) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	result, err := collection.Table.Find(ctx, collection.filter, &options.FindOptions{
 		Skip:       &collection.skip,
@@ -184,57 +245,76 @@ func (collection *collection) FindMany(documents interface{}) {
 	})
 	if err != nil {
 		log.Println(err)
+		collection.reset()
+		return
 	}
 	defer result.Close(ctx)
 
 	val := reflect.ValueOf(documents)
 	if val.Kind() != reflect.Ptr || val.Elem().Kind() != reflect.Slice {
 		log.Println("result argument must be a slice address")
+		err = errors.New("result argument must be a slice address")
+		collection.reset()
+		return
 	}
 
 	slice := reflect.MakeSlice(val.Elem().Type(), 0, 0)
-
 	itemTyp := val.Elem().Type().Elem()
 	for result.Next(ctx) {
-
 		item := reflect.New(itemTyp)
 		err := result.Decode(item.Interface())
 		if err != nil {
 			log.Println(err)
-			break
+			err = errors.New("result argument must be a slice address")
+			collection.reset()
+			return err
 		}
 
 		slice = reflect.Append(slice, reflect.Indirect(item))
 	}
 	val.Elem().Set(slice)
+	collection.reset()
+	return
 }
 
 // 删除数据,并返回删除成功的数量
-func (collection *collection) Delete() int64 {
+func (collection *collection) Delete() (count int64, err error) {
 	if collection.filter == nil || len(collection.filter) == 0 {
 		log.Println("you can't delete all documents, it's very dangerous")
-		return 0
+		err = errors.New("you can't delete all documents, it's very dangerous")
+		collection.reset()
+		return
 	}
+
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	result, err := collection.Table.DeleteMany(ctx, collection.filter)
 	if err != nil {
 		log.Println(err)
+		collection.reset()
+		return
 	}
+	count = result.DeletedCount
 	collection.reset()
-	return result.DeletedCount
+	return
 }
 
-func (collection *collection) Count() int64 {
+func (collection *collection) Drop() error {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-	result, err := collection.Table.CountDocuments(ctx, collection.filter)
+	err := collection.Table.Drop(ctx)
+	return err
+}
+
+func (collection *collection) Count() (result int64, err error) {
+	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	result, err = collection.Table.CountDocuments(ctx, collection.filter)
 	if err != nil {
 		log.Println(err)
-		return 0
+		collection.reset()
+		return
 	}
 	collection.reset()
-	return result
+	return
 }
-
 func BeforeCreate(document interface{}) interface{} {
 	val := reflect.ValueOf(document)
 	typ := reflect.TypeOf(document)
@@ -283,6 +363,7 @@ func BeforeCreate(document interface{}) interface{} {
 func BeforeUpdate(document interface{}) interface{} {
 	val := reflect.ValueOf(document)
 	typ := reflect.TypeOf(document)
+
 	switch typ.Kind() {
 	case reflect.Ptr:
 		return BeforeUpdate(val.Elem().Interface())
@@ -290,16 +371,18 @@ func BeforeUpdate(document interface{}) interface{} {
 	case reflect.Array, reflect.Slice:
 		var sliceData = make([]interface{}, val.Len(), val.Cap())
 		for i := 0; i < val.Len(); i++ {
-			sliceData[i] = BeforeUpdate(val.Index(i).Interface()).(bson.M)
+			sliceData[i] = BeforeCreate(val.Index(i).Interface()).(bson.M)
 		}
 		return sliceData
 
 	case reflect.Struct:
 		var data = make(bson.M)
 		for i := 0; i < typ.NumField(); i++ {
-			if !isZero(val.Field(i)) {
-				data[typ.Field(i).Tag.Get("bson")] = val.Field(i).Interface()
+			_, ok := typ.Field(i).Tag.Lookup("over")
+			if ok {
+				continue
 			}
+			data[typ.Field(i).Tag.Get("bson")] = val.Field(i).Interface()
 		}
 		dataVal := reflect.ValueOf(data)
 		// dataVal.SetMapIndex(reflect.ValueOf("updated_at"), reflect.ValueOf(time.Now().Unix()))
@@ -312,7 +395,6 @@ func BeforeUpdate(document interface{}) interface{} {
 		return val.Interface()
 	}
 }
-
 func isZero(value reflect.Value) bool {
 	switch value.Kind() {
 	case reflect.String:
