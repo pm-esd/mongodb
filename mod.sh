@@ -13,4 +13,4 @@ go mod verify;
 #解释为什么需要依赖
 go mod why;
 #依赖详情
-go list -m -json all;
+# go list -m -json all;
