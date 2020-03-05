@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"reflect"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -15,7 +16,7 @@ import (
 
 type MongoDBClient struct {
 	Client *mongo.Client
-	Opt    *Opt
+	Name   string
 }
 
 // var client *mongo.Client
@@ -33,34 +34,73 @@ type collection struct {
 //Config .
 type Opt struct {
 	Url             string
-	Database        string
 	MaxConnIdleTime int
 	MaxPoolSize     int
-	Username        string
-	Password        string
+	MinPoolSize     int
 }
 
-// NewClient 启动MongoDB
-func (opt *Opt) NewClient() *MongoDBClient {
-	var err error
-	mongoOptions := options.Client()
+// Configs 配置
+type Configs struct {
+	opt         map[string]*Opt
+	connections map[string]*MongoDBClient
+	sync.RWMutex
+}
 
-	mongoOptions.SetMaxConnIdleTime(time.Duration(opt.MaxConnIdleTime) * time.Second)
-	mongoOptions.SetMaxPoolSize(uint64(opt.MaxPoolSize))
-	if opt.Username != "" && opt.Password != "" {
-		mongoOptions.SetAuth(options.Credential{Username: opt.Username, Password: opt.Password})
+//Default ..
+func Default() *Configs {
+	return &Configs{
+		opt:         make(map[string]*Opt),
+		connections: make(map[string]*MongoDBClient),
 	}
-	client, err := mongo.NewClient(mongoOptions.ApplyURI(opt.Url))
+}
+
+//SetOpt 设置配置文件
+func (configs *Configs) SetOpt(name string, cf *Opt) *Configs {
+	configs.opt[name] = cf
+	return configs
+}
+
+//connect 数据库连接
+func connect(config *Opt, name string) *MongoDBClient {
+	//数据库连接
+	mongoOptions := options.Client()
+	mongoOptions.SetMaxConnIdleTime(time.Duration(config.MaxConnIdleTime) * time.Second)
+	mongoOptions.SetMaxPoolSize(uint64(config.MaxPoolSize))
+	mongoOptions.SetMinPoolSize(uint64(config.MinPoolSize))
+	client, err := mongo.NewClient(mongoOptions.ApplyURI(config.Url))
 	if err != nil {
 		log.Fatalln(err)
+		return nil
 	}
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	err = client.Connect(ctx)
 	if err != nil {
 		log.Fatalln(err)
+		return nil
 	}
+	return &MongoDBClient{Client: client, Name: name}
+}
 
-	return &MongoDBClient{Client: client, Opt: opt}
+//GetMongoDB 获取实列
+func (configs *Configs) GetMongoDB(name string) *MongoDBClient {
+	conn, ok := configs.connections[name]
+	if ok {
+		return conn
+	}
+	config, ok := configs.opt[name]
+	if !ok {
+		log.Fatalln("DB配置:" + name + "找不到！")
+	}
+	db := connect(config, name)
+	configs.Lock()
+	configs.connections[name] = db
+	configs.Unlock()
+
+	configs.RLock()
+	v := configs.connections[name]
+	configs.RUnlock()
+	return v
+
 }
 
 func (collection *collection) reset() {
@@ -74,7 +114,7 @@ func (collection *collection) reset() {
 
 // Collection 得到一个mongo操作对象
 func (client *MongoDBClient) Collection(table string) *collection {
-	database := client.Client.Database(client.Opt.Database)
+	database := client.Client.Database(client.Name)
 	return &collection{
 		Database: database,
 		Table:    database.Collection(table),
