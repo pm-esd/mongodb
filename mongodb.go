@@ -37,6 +37,7 @@ type Opt struct {
 	MaxConnIdleTime int
 	MaxPoolSize     int
 	MinPoolSize     int
+	Database        string
 }
 
 // Configs 配置
@@ -91,7 +92,7 @@ func (configs *Configs) GetMongoDB(name string) *MongoDBClient {
 	if !ok {
 		log.Fatalln("DB配置:" + name + "找不到！")
 	}
-	db := connect(config, name)
+	db := connect(config, config.Database)
 	configs.Lock()
 	configs.connections[name] = db
 	configs.Unlock()
