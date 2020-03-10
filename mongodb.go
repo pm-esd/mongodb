@@ -153,32 +153,56 @@ func (collection *collection) Fields(fields bson.M) *collection {
 	return collection
 }
 
-//CreateManyIndex 多字段创建index索引
-func (c *collection) CreateManyIndex(keys map[string]interface{}) (res []string, err error) {
+//CreateOneIndex 创建单个普通索引
+func (collection *collection) CreateOneIndex(key map[string]interface{}, op *options.IndexOptions) (res string, err error) {
 	ctx := context.Background()
-	indexView := c.Table.Indexes()
-	indexModels := make([]mongo.IndexModel, len(keys))
-	j := 0
-	for i, v := range keys {
-		key := map[string]interface{}{i: v}
-		indexModels[j] = mongo.IndexModel{
-			Keys: key,
-		}
-		j++
-	}
-	res, err = indexView.CreateMany(ctx, indexModels)
+	indexView := collection.Table.Indexes()
+	indexModel := mongo.IndexModel{Keys: key, Options: op}
+	res, err = indexView.CreateOne(ctx, indexModel)
 	return
 }
 
-// 单字段创建唯一索引
-func (collection *collection) CreateUniqueIndex(keys map[string]interface{}) (res string, err error) {
+//ListIndexes 获取所有所有
+func (collection *collection) ListIndexes(opts *options.ListIndexesOptions) (interface{}, error) {
 	ctx := context.Background()
-	unique := true
+	var results interface{}
 	indexView := collection.Table.Indexes()
-	option := options.Index()
-	option.Unique = &unique
-	indexModel := mongo.IndexModel{Keys: keys, Options: option}
+	cursor, err := indexView.List(ctx, opts)
+	if err != nil {
+		collection.reset()
+		return nil, err
+	}
+
+	err = cursor.All(ctx, &results)
+	if err != nil {
+		collection.reset()
+		return nil, err
+	}
+	collection.reset()
+	return results, nil
+}
+
+//DropIndex 删除索引
+func (collection *collection) DropIndex(name string, opts *options.DropIndexesOptions) error {
+	ctx := context.Background()
+	indexView := collection.Table.Indexes()
+
+	_, err := indexView.DropOne(ctx, name, opts)
+	if err != nil {
+		collection.reset()
+		return err
+	}
+	collection.reset()
+	return nil
+}
+
+// 单字段创建唯一索引
+func (collection *collection) CreateOneUniqueIndex(keys map[string]interface{}, op *options.IndexOptions) (res string, err error) {
+	ctx := context.Background()
+	indexView := collection.Table.Indexes()
+	indexModel := mongo.IndexModel{Keys: keys, Options: op}
 	res, err = indexView.CreateOne(ctx, indexModel)
+	collection.reset()
 	return
 }
 
@@ -186,7 +210,6 @@ func (collection *collection) CreateUniqueIndex(keys map[string]interface{}) (re
 func (collection *collection) InsertOne(document interface{}) (*mongo.InsertOneResult, error) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	result, err := collection.Table.InsertOne(ctx, BeforeCreate(document))
-
 	collection.reset()
 	return result, err
 }
