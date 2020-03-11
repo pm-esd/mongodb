@@ -154,7 +154,7 @@ func (collection *collection) Fields(fields bson.M) *collection {
 }
 
 //CreateOneIndex 创建单个普通索引
-func (collection *collection) CreateOneIndex(key map[string]interface{}, op *options.IndexOptions) (res string, err error) {
+func (collection *collection) CreateIndex(key map[string]interface{}, op *options.IndexOptions) (res string, err error) {
 	ctx := context.Background()
 	indexView := collection.Table.Indexes()
 	indexModel := mongo.IndexModel{Keys: key, Options: op}
@@ -194,16 +194,6 @@ func (collection *collection) DropIndex(name string, opts *options.DropIndexesOp
 	}
 	collection.reset()
 	return nil
-}
-
-// 单字段创建唯一索引
-func (collection *collection) CreateOneUniqueIndex(keys map[string]interface{}, op *options.IndexOptions) (res string, err error) {
-	ctx := context.Background()
-	indexView := collection.Table.Indexes()
-	indexModel := mongo.IndexModel{Keys: keys, Options: op}
-	res, err = indexView.CreateOne(ctx, indexModel)
-	collection.reset()
-	return
 }
 
 // 写入单条数据
