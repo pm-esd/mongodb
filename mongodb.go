@@ -235,13 +235,11 @@ func (collection *collection) Aggregate(pipeline interface{}, result interface{}
 	cursor, err := collection.Table.Aggregate(ctx, pipeline)
 	if err != nil {
 		collection.reset()
-		Log.Info(err)
 		return
 	}
 	err = cursor.All(ctx, result)
 	if err != nil {
 		collection.reset()
-		Log.Info(err)
 		return
 	}
 	collection.reset()
@@ -253,9 +251,7 @@ func (collection *collection) UpdateOrInsert(documents []interface{}) (*mongo.Up
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	var upsert = true
 	result, err := collection.Table.UpdateMany(ctx, collection.filter, documents, &options.UpdateOptions{Upsert: &upsert})
-	if err != nil {
-		Log.Info(err)
-	}
+	collection.reset()
 	return result, err
 }
 
@@ -269,13 +265,11 @@ func (collection *collection) UpdateOne(document interface{}) (*mongo.UpdateResu
 }
 
 //原生update
-func (collection *collection) UpdateOneRaw(document interface{}, opt ...*options.UpdateOptions) *mongo.UpdateResult {
+func (collection *collection) UpdateOneRaw(document interface{}, opt ...*options.UpdateOptions) (*mongo.UpdateResult, error) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	result, err := collection.Table.UpdateOne(ctx, collection.filter, document, opt...)
-	if err != nil {
-		Log.Info(err)
-	}
-	return result
+	collection.reset()
+	return result, err
 }
 
 //
@@ -297,7 +291,7 @@ func (collection *collection) FindOne(document interface{}) error {
 	})
 	err := result.Decode(document)
 	if err != nil {
-		Log.Info(err)
+		collection.reset()
 		return err
 	}
 	collection.reset()
@@ -314,15 +308,12 @@ func (collection *collection) FindMany(documents interface{}) (err error) {
 		Projection: collection.fields,
 	})
 	if err != nil {
-		Log.Info(err)
 		collection.reset()
 		return
 	}
 	defer result.Close(ctx)
-
 	val := reflect.ValueOf(documents)
 	if val.Kind() != reflect.Ptr || val.Elem().Kind() != reflect.Slice {
-		Log.Info("result argument must be a slice address")
 		err = errors.New("result argument must be a slice address")
 		collection.reset()
 		return
@@ -334,7 +325,6 @@ func (collection *collection) FindMany(documents interface{}) (err error) {
 		item := reflect.New(itemTyp)
 		err := result.Decode(item.Interface())
 		if err != nil {
-			Log.Info(err)
 			err = errors.New("result argument must be a slice address")
 			collection.reset()
 			return err
@@ -350,7 +340,6 @@ func (collection *collection) FindMany(documents interface{}) (err error) {
 // 删除数据,并返回删除成功的数量
 func (collection *collection) Delete() (count int64, err error) {
 	if collection.filter == nil || len(collection.filter) == 0 {
-		Log.Info("you can't delete all documents, it's very dangerous")
 		err = errors.New("you can't delete all documents, it's very dangerous")
 		collection.reset()
 		return
@@ -359,7 +348,6 @@ func (collection *collection) Delete() (count int64, err error) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	result, err := collection.Table.DeleteMany(ctx, collection.filter)
 	if err != nil {
-		Log.Info(err)
 		collection.reset()
 		return
 	}
@@ -378,7 +366,6 @@ func (collection *collection) Count() (result int64, err error) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	result, err = collection.Table.CountDocuments(ctx, collection.filter)
 	if err != nil {
-		Log.Info(err)
 		collection.reset()
 		return
 	}
