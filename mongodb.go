@@ -86,13 +86,13 @@ func connect(config *Opt, name string) *MongoDBClient {
 	mongoOptions.SetMinPoolSize(uint64(config.MinPoolSize))
 	client, err := mongo.NewClient(mongoOptions.ApplyURI(config.Url))
 	if err != nil {
-		Log.Fatalln(err)
+		Log.Fatal(err)
 		return nil
 	}
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	err = client.Connect(ctx)
 	if err != nil {
-		Log.Fatalln(err)
+		Log.Fatal(err)
 		return nil
 	}
 	return &MongoDBClient{Client: client, Name: name}
@@ -106,7 +106,7 @@ func (configs *Configs) GetMongoDB(name string) *MongoDBClient {
 	}
 	config, ok := configs.opt[name]
 	if !ok {
-		Log.Fatalln("DB配置:" + name + "找不到！")
+		Log.Fatal("DB配置:" + name + "找不到！")
 	}
 	db := connect(config, config.Database)
 	configs.Lock()
@@ -235,13 +235,13 @@ func (collection *collection) Aggregate(pipeline interface{}, result interface{}
 	cursor, err := collection.Table.Aggregate(ctx, pipeline)
 	if err != nil {
 		collection.reset()
-		Log.Println(err)
+		Log.Info(err)
 		return
 	}
 	err = cursor.All(ctx, result)
 	if err != nil {
 		collection.reset()
-		Log.Println(err)
+		Log.Info(err)
 		return
 	}
 	collection.reset()
@@ -254,7 +254,7 @@ func (collection *collection) UpdateOrInsert(documents []interface{}) (*mongo.Up
 	var upsert = true
 	result, err := collection.Table.UpdateMany(ctx, collection.filter, documents, &options.UpdateOptions{Upsert: &upsert})
 	if err != nil {
-		Log.Println(err)
+		Log.Info(err)
 	}
 	return result, err
 }
@@ -273,7 +273,7 @@ func (collection *collection) UpdateOneRaw(document interface{}, opt ...*options
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	result, err := collection.Table.UpdateOne(ctx, collection.filter, document, opt...)
 	if err != nil {
-		Log.Println(err)
+		Log.Info(err)
 	}
 	return result
 }
@@ -297,7 +297,7 @@ func (collection *collection) FindOne(document interface{}) error {
 	})
 	err := result.Decode(document)
 	if err != nil {
-		Log.Println(err)
+		Log.Info(err)
 		return err
 	}
 	collection.reset()
@@ -314,7 +314,7 @@ func (collection *collection) FindMany(documents interface{}) (err error) {
 		Projection: collection.fields,
 	})
 	if err != nil {
-		Log.Println(err)
+		Log.Info(err)
 		collection.reset()
 		return
 	}
@@ -322,7 +322,7 @@ func (collection *collection) FindMany(documents interface{}) (err error) {
 
 	val := reflect.ValueOf(documents)
 	if val.Kind() != reflect.Ptr || val.Elem().Kind() != reflect.Slice {
-		Log.Println("result argument must be a slice address")
+		Log.Info("result argument must be a slice address")
 		err = errors.New("result argument must be a slice address")
 		collection.reset()
 		return
@@ -334,7 +334,7 @@ func (collection *collection) FindMany(documents interface{}) (err error) {
 		item := reflect.New(itemTyp)
 		err := result.Decode(item.Interface())
 		if err != nil {
-			Log.Println(err)
+			Log.Info(err)
 			err = errors.New("result argument must be a slice address")
 			collection.reset()
 			return err
@@ -350,7 +350,7 @@ func (collection *collection) FindMany(documents interface{}) (err error) {
 // 删除数据,并返回删除成功的数量
 func (collection *collection) Delete() (count int64, err error) {
 	if collection.filter == nil || len(collection.filter) == 0 {
-		Log.Println("you can't delete all documents, it's very dangerous")
+		Log.Info("you can't delete all documents, it's very dangerous")
 		err = errors.New("you can't delete all documents, it's very dangerous")
 		collection.reset()
 		return
@@ -359,7 +359,7 @@ func (collection *collection) Delete() (count int64, err error) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	result, err := collection.Table.DeleteMany(ctx, collection.filter)
 	if err != nil {
-		Log.Println(err)
+		Log.Info(err)
 		collection.reset()
 		return
 	}
@@ -378,7 +378,7 @@ func (collection *collection) Count() (result int64, err error) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	result, err = collection.Table.CountDocuments(ctx, collection.filter)
 	if err != nil {
-		Log.Println(err)
+		Log.Info(err)
 		collection.reset()
 		return
 	}
