@@ -170,7 +170,7 @@ func (collection *collection) Fields(fields bson.M) *collection {
 }
 
 //CreateOneIndex 创建单个普通索引
-func (collection *collection) CreateIndex(key bson.M, op *options.IndexOptions) (res string, err error) {
+func (collection *collection) CreateIndex(key bson.D, op *options.IndexOptions) (res string, err error) {
 	ctx := context.Background()
 	indexView := collection.Table.Indexes()
 	indexModel := mongo.IndexModel{Keys: key, Options: op}
