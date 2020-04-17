@@ -136,7 +136,7 @@ func (client *MongoDBClient) Collection(table string) *collection {
 		Database: database,
 		Table:    database.Collection(table),
 		filter:   make(bson.D, 0),
-		// sort:     make(bson.D, 0),
+		sort:     make(bson.D, 0),
 	}
 }
 
