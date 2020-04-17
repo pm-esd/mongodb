@@ -40,10 +40,10 @@ type MongoDBClient struct {
 type collection struct {
 	Database *mongo.Database
 	Table    *mongo.Collection
-	filter   bson.M
+	filter   bson.D
 	limit    int64
 	skip     int64
-	sort     bson.M
+	sort     bson.D
 	fields   bson.M
 }
 
@@ -135,12 +135,13 @@ func (client *MongoDBClient) Collection(table string) *collection {
 	return &collection{
 		Database: database,
 		Table:    database.Collection(table),
-		filter:   make(bson.M),
+		filter:   make(bson.D, 0),
+		// sort:     make(bson.D, 0),
 	}
 }
 
 // 条件查询, bson.M{"field": "value"}
-func (collection *collection) Where(m bson.M) *collection {
+func (collection *collection) Where(m bson.D) *collection {
 	collection.filter = m
 	return collection
 }
@@ -158,7 +159,7 @@ func (collection *collection) Skip(n int64) *collection {
 }
 
 // 排序 bson.M{"created_at":-1}
-func (collection *collection) Sort(sorts bson.M) *collection {
+func (collection *collection) Sort(sorts bson.D) *collection {
 	collection.sort = sorts
 	return collection
 }
