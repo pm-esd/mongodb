@@ -60,7 +60,7 @@ type Opt struct {
 type Configs struct {
 	opt         map[string]*Opt
 	connections map[string]*MongoDBClient
-	sync.RWMutex
+	mu          sync.RWMutex
 }
 
 //Default ..
@@ -92,7 +92,7 @@ func connect(config *Opt, name string) *MongoDBClient {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	err = client.Connect(ctx)
 	if err != nil {
-		Log.Fatal(err)
+		Log.Fatal("MongoDB连接失败->", err)
 		return nil
 	}
 	return &MongoDBClient{Client: client, Name: name}
@@ -106,16 +106,16 @@ func (configs *Configs) GetMongoDB(name string) *MongoDBClient {
 	}
 	config, ok := configs.opt[name]
 	if !ok {
-		Log.Fatal("DB配置:" + name + "找不到！")
+		Log.Fatal("MongoDB配置:" + name + "找不到！")
 	}
 	db := connect(config, config.Database)
-	configs.Lock()
+	configs.mu.Lock()
 	configs.connections[name] = db
-	configs.Unlock()
+	configs.mu.Unlock()
 
-	configs.RLock()
+	configs.mu.RLock()
 	v := configs.connections[name]
-	configs.RUnlock()
+	configs.mu.RUnlock()
 	return v
 
 }
