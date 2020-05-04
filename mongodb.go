@@ -86,13 +86,13 @@ func connect(config *Opt, name string) *MongoDBClient {
 	mongoOptions.SetMinPoolSize(uint64(config.MinPoolSize))
 	client, err := mongo.NewClient(mongoOptions.ApplyURI(config.Url))
 	if err != nil {
-		Log.Fatal(err)
+		Log.Panic(err)
 		return nil
 	}
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	err = client.Connect(ctx)
 	if err != nil {
-		Log.Fatal("MongoDB连接失败->", err)
+		Log.Panic("MongoDB连接失败->", err)
 		return nil
 	}
 	return &MongoDBClient{Client: client, Name: name}
@@ -106,7 +106,7 @@ func (configs *Configs) GetMongoDB(name string) *MongoDBClient {
 	}
 	config, ok := configs.opt[name]
 	if !ok {
-		Log.Fatal("MongoDB配置:" + name + "找不到！")
+		Log.Panic("MongoDB配置:" + name + "找不到！")
 	}
 	db := connect(config, config.Database)
 	configs.mu.Lock()
