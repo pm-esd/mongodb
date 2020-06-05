@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -171,18 +173,48 @@ func (collection *collection) Fields(fields bson.M) *collection {
 }
 
 //CreateOneIndex 创建单个普通索引
-func (collection *collection) CreateIndex(key bson.D, op *options.IndexOptions) (res string, err error) {
-	ctx := context.Background()
+func (collection *collection) CreateIndex(ctx context.Context, key bson.D, op *options.IndexOptions) (res string, err error) {
+
+	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
+		parentCtx := parentSpan.Context()
+		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
+		ext.SpanKindRPCClient.Set(span)
+		ext.PeerService.Set(span, "mongodb")
+		span.SetTag("database", collection.Database.Name())
+		span.SetTag("table", collection.Table.Name())
+		span.SetTag("method", "CreateIndex")
+		span.SetTag("keys", key)
+		span.SetTag("options", op)
+
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+
 	indexView := collection.Table.Indexes()
 	indexModel := mongo.IndexModel{Keys: key, Options: op}
 	res, err = indexView.CreateOne(ctx, indexModel)
+
 	return
 }
 
 //ListIndexes 获取所有所有
-func (collection *collection) ListIndexes(opts *options.ListIndexesOptions) (interface{}, error) {
-	ctx := context.Background()
+func (collection *collection) ListIndexes(ctx context.Context, opts *options.ListIndexesOptions) (interface{}, error) {
 	var results interface{}
+
+	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
+		parentCtx := parentSpan.Context()
+		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
+		ext.SpanKindRPCClient.Set(span)
+		ext.PeerService.Set(span, "mongodb")
+		span.SetTag("database", collection.Database.Name())
+		span.SetTag("table", collection.Table.Name())
+		span.SetTag("method", "ListIndexes")
+		span.SetTag("options", opts)
+
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+
 	indexView := collection.Table.Indexes()
 	cursor, err := indexView.List(ctx, opts)
 	if err != nil {
@@ -200,9 +232,22 @@ func (collection *collection) ListIndexes(opts *options.ListIndexesOptions) (int
 }
 
 //DropIndex 删除索引
-func (collection *collection) DropIndex(name string, opts *options.DropIndexesOptions) error {
-	ctx := context.Background()
+func (collection *collection) DropIndex(ctx context.Context, name string, opts *options.DropIndexesOptions) error {
 	indexView := collection.Table.Indexes()
+
+	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
+		parentCtx := parentSpan.Context()
+		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
+		ext.SpanKindRPCClient.Set(span)
+		ext.PeerService.Set(span, "mongodb")
+		span.SetTag("database", collection.Database.Name())
+		span.SetTag("table", collection.Table.Name())
+		span.SetTag("method", "DropIndex")
+		span.SetTag("indexname", name)
+		span.SetTag("options", opts)
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
 
 	_, err := indexView.DropOne(ctx, name, opts)
 	if err != nil {
@@ -214,31 +259,70 @@ func (collection *collection) DropIndex(name string, opts *options.DropIndexesOp
 }
 
 // 写入单条数据
-func (collection *collection) InsertOne(document interface{}) (*mongo.InsertOneResult, error) {
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-	result, err := collection.Table.InsertOne(ctx, BeforeCreate(document))
+func (collection *collection) InsertOne(ctx context.Context, document interface{}) (*mongo.InsertOneResult, error) {
+	var data interface{}
+	data = BeforeCreate(document)
+	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
+		parentCtx := parentSpan.Context()
+		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
+		ext.SpanKindRPCClient.Set(span)
+		ext.PeerService.Set(span, "mongodb")
+		span.SetTag("database", collection.Database.Name())
+		span.SetTag("table", collection.Table.Name())
+		span.SetTag("method", "InsertOne")
+		span.SetTag("data", data)
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+
+	ct, _ := context.WithTimeout(ctx, 5*time.Second)
+	result, err := collection.Table.InsertOne(ct, data)
 	collection.reset()
 	return result, err
 }
 
 // 写入多条数据
-func (collection *collection) InsertMany(documents interface{}) (*mongo.InsertManyResult, error) {
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+func (collection *collection) InsertMany(ctx context.Context, documents interface{}) (*mongo.InsertManyResult, error) {
 	var data []interface{}
 	data = BeforeCreate(documents).([]interface{})
-	result, err := collection.Table.InsertMany(ctx, data)
+	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
+		parentCtx := parentSpan.Context()
+		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
+		ext.SpanKindRPCClient.Set(span)
+		ext.PeerService.Set(span, "mongodb")
+		span.SetTag("database", collection.Database.Name())
+		span.SetTag("table", collection.Table.Name())
+		span.SetTag("method", "InsertMany")
+		span.SetTag("data", data)
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+	ct, _ := context.WithTimeout(ctx, 5*time.Second)
+	result, err := collection.Table.InsertMany(ct, data)
 	collection.reset()
 	return result, err
 }
 
-func (collection *collection) Aggregate(pipeline interface{}, result interface{}) (err error) {
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+func (collection *collection) Aggregate(ctx context.Context, pipeline interface{}, result interface{}) (err error) {
+	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
+		parentCtx := parentSpan.Context()
+		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
+		ext.SpanKindRPCClient.Set(span)
+		ext.PeerService.Set(span, "mongodb")
+		span.SetTag("database", collection.Database.Name())
+		span.SetTag("table", collection.Table.Name())
+		span.SetTag("method", "Aggregate")
+		span.SetTag("data", pipeline)
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+	ct, _ := context.WithTimeout(ctx, 5*time.Second)
 	cursor, err := collection.Table.Aggregate(ctx, pipeline)
 	if err != nil {
 		collection.reset()
 		return
 	}
-	err = cursor.All(ctx, result)
+	err = cursor.All(ct, result)
 	if err != nil {
 		collection.reset()
 		return
@@ -248,44 +332,115 @@ func (collection *collection) Aggregate(pipeline interface{}, result interface{}
 }
 
 // 存在更新,不存在写入, documents 里边的文档需要有 _id 的存在
-func (collection *collection) UpdateOrInsert(documents []interface{}) (*mongo.UpdateResult, error) {
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+func (collection *collection) UpdateOrInsert(ctx context.Context, documents []interface{}) (*mongo.UpdateResult, error) {
+	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
+		parentCtx := parentSpan.Context()
+		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
+		ext.SpanKindRPCClient.Set(span)
+		ext.PeerService.Set(span, "mongodb")
+		span.SetTag("database", collection.Database.Name())
+		span.SetTag("table", collection.Table.Name())
+		span.SetTag("method", "UpdateOrInsert")
+		span.SetTag("filter", collection.filter)
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+	ct, _ := context.WithTimeout(ctx, 5*time.Second)
 	var upsert = true
-	result, err := collection.Table.UpdateMany(ctx, collection.filter, documents, &options.UpdateOptions{Upsert: &upsert})
+	result, err := collection.Table.UpdateMany(ct, collection.filter, documents, &options.UpdateOptions{Upsert: &upsert})
 	collection.reset()
 	return result, err
 }
 
 //
-func (collection *collection) UpdateOne(document interface{}) (*mongo.UpdateResult, error) {
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-	result, err := collection.Table.UpdateOne(ctx, collection.filter, bson.M{"$set": BeforeUpdate(document)})
+func (collection *collection) UpdateOne(ctx context.Context, document interface{}) (*mongo.UpdateResult, error) {
+	var update bson.M
+	update = bson.M{"$set": BeforeUpdate(document)}
+	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
+		parentCtx := parentSpan.Context()
+		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
+		ext.SpanKindRPCClient.Set(span)
+		ext.PeerService.Set(span, "mongodb")
+		span.SetTag("database", collection.Database.Name())
+		span.SetTag("table", collection.Table.Name())
+		span.SetTag("method", "UpdateOne")
+		span.SetTag("filter", collection.filter)
+		span.SetTag("update", update)
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+	ct, _ := context.WithTimeout(ctx, 5*time.Second)
+	result, err := collection.Table.UpdateOne(ct, collection.filter, update)
 
 	collection.reset()
 	return result, err
 }
 
 //原生update
-func (collection *collection) UpdateOneRaw(document interface{}, opt ...*options.UpdateOptions) (*mongo.UpdateResult, error) {
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-	result, err := collection.Table.UpdateOne(ctx, collection.filter, document, opt...)
+func (collection *collection) UpdateOneRaw(ctx context.Context, document interface{}, opt ...*options.UpdateOptions) (*mongo.UpdateResult, error) {
+	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
+		parentCtx := parentSpan.Context()
+		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
+		ext.SpanKindRPCClient.Set(span)
+		ext.PeerService.Set(span, "mongodb")
+		span.SetTag("database", collection.Database.Name())
+		span.SetTag("table", collection.Table.Name())
+		span.SetTag("method", "UpdateOneRaw")
+		span.SetTag("filter", collection.filter)
+		span.SetTag("update", document)
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+	ct, _ := context.WithTimeout(ctx, 5*time.Second)
+	result, err := collection.Table.UpdateOne(ct, collection.filter, document, opt...)
 	collection.reset()
 	return result, err
 }
 
 //
-func (collection *collection) UpdateMany(document interface{}) (*mongo.UpdateResult, error) {
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-	result, err := collection.Table.UpdateMany(ctx, collection.filter, bson.M{"$set": BeforeUpdate(document)})
+func (collection *collection) UpdateMany(ctx context.Context, document interface{}) (*mongo.UpdateResult, error) {
+
+	var update bson.M
+	update = bson.M{"$set": BeforeUpdate(document)}
+	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
+		parentCtx := parentSpan.Context()
+		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
+		ext.SpanKindRPCClient.Set(span)
+		ext.PeerService.Set(span, "mongodb")
+		span.SetTag("database", collection.Database.Name())
+		span.SetTag("table", collection.Table.Name())
+		span.SetTag("method", "UpdateMany")
+		span.SetTag("filter", collection.filter)
+		span.SetTag("update", update)
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+	ct, _ := context.WithTimeout(ctx, 5*time.Second)
+	result, err := collection.Table.UpdateMany(ct, collection.filter, update)
 
 	collection.reset()
 	return result, err
 }
 
 // 查询一条数据
-func (collection *collection) FindOne(document interface{}) error {
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-	result := collection.Table.FindOne(ctx, collection.filter, &options.FindOneOptions{
+func (collection *collection) FindOne(ctx context.Context, document interface{}) error {
+	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
+		parentCtx := parentSpan.Context()
+		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
+		ext.SpanKindRPCClient.Set(span)
+		ext.PeerService.Set(span, "mongodb")
+		span.SetTag("database", collection.Database.Name())
+		span.SetTag("table", collection.Table.Name())
+		span.SetTag("method", "FindOne")
+		span.SetTag("filter", collection.filter)
+		span.SetTag("skip", collection.skip)
+		span.SetTag("sort", collection.sort)
+		span.SetTag("fields", collection.fields)
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+	ct, _ := context.WithTimeout(ctx, 5*time.Second)
+	result := collection.Table.FindOne(ct, collection.filter, &options.FindOneOptions{
 		Skip:       &collection.skip,
 		Sort:       collection.sort,
 		Projection: collection.fields,
@@ -300,9 +455,25 @@ func (collection *collection) FindOne(document interface{}) error {
 }
 
 // 查询多条数据
-func (collection *collection) FindMany(documents interface{}) (err error) {
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-	result, err := collection.Table.Find(ctx, collection.filter, &options.FindOptions{
+func (collection *collection) FindMany(ctx context.Context, documents interface{}) (err error) {
+	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
+		parentCtx := parentSpan.Context()
+		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
+		ext.SpanKindRPCClient.Set(span)
+		ext.PeerService.Set(span, "mongodb")
+		span.SetTag("database", collection.Database.Name())
+		span.SetTag("table", collection.Table.Name())
+		span.SetTag("method", "FindMany")
+		span.SetTag("filter", collection.filter)
+		span.SetTag("skip", collection.skip)
+		span.SetTag("limit", collection.limit)
+		span.SetTag("sort", collection.sort)
+		span.SetTag("fields", collection.fields)
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+	ct, _ := context.WithTimeout(ctx, 5*time.Second)
+	result, err := collection.Table.Find(ct, collection.filter, &options.FindOptions{
 		Skip:       &collection.skip,
 		Limit:      &collection.limit,
 		Sort:       collection.sort,
@@ -312,7 +483,7 @@ func (collection *collection) FindMany(documents interface{}) (err error) {
 		collection.reset()
 		return
 	}
-	defer result.Close(ctx)
+	defer result.Close(ct)
 	val := reflect.ValueOf(documents)
 	if val.Kind() != reflect.Ptr || val.Elem().Kind() != reflect.Slice {
 		err = errors.New("result argument must be a slice address")
@@ -322,7 +493,7 @@ func (collection *collection) FindMany(documents interface{}) (err error) {
 
 	slice := reflect.MakeSlice(val.Elem().Type(), 0, 0)
 	itemTyp := val.Elem().Type().Elem()
-	for result.Next(ctx) {
+	for result.Next(ct) {
 		item := reflect.New(itemTyp)
 		err := result.Decode(item.Interface())
 		if err != nil {
@@ -339,15 +510,28 @@ func (collection *collection) FindMany(documents interface{}) (err error) {
 }
 
 // 删除数据,并返回删除成功的数量
-func (collection *collection) Delete() (count int64, err error) {
+func (collection *collection) Delete(ctx context.Context) (count int64, err error) {
+	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
+		parentCtx := parentSpan.Context()
+		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
+		ext.SpanKindRPCClient.Set(span)
+		ext.PeerService.Set(span, "mongodb")
+		span.SetTag("database", collection.Database.Name())
+		span.SetTag("table", collection.Table.Name())
+		span.SetTag("method", "Delete")
+		span.SetTag("filter", collection.filter)
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+
 	if collection.filter == nil || len(collection.filter) == 0 {
 		err = errors.New("you can't delete all documents, it's very dangerous")
 		collection.reset()
 		return
 	}
 
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-	result, err := collection.Table.DeleteMany(ctx, collection.filter)
+	ct, _ := context.WithTimeout(ctx, 5*time.Second)
+	result, err := collection.Table.DeleteMany(ct, collection.filter)
 	if err != nil {
 		collection.reset()
 		return
@@ -357,15 +541,38 @@ func (collection *collection) Delete() (count int64, err error) {
 	return
 }
 
-func (collection *collection) Drop() error {
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-	err := collection.Table.Drop(ctx)
+func (collection *collection) Drop(ctx context.Context) error {
+	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
+		parentCtx := parentSpan.Context()
+		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
+		ext.SpanKindRPCClient.Set(span)
+		ext.PeerService.Set(span, "mongodb")
+		span.SetTag("database", collection.Database.Name())
+		span.SetTag("table", collection.Table.Name())
+		span.SetTag("method", "Drop")
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+	ct, _ := context.WithTimeout(ctx, 5*time.Second)
+	err := collection.Table.Drop(ct)
 	return err
 }
 
-func (collection *collection) Count() (result int64, err error) {
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-	result, err = collection.Table.CountDocuments(ctx, collection.filter)
+func (collection *collection) Count(ctx context.Context) (result int64, err error) {
+	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
+		parentCtx := parentSpan.Context()
+		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
+		ext.SpanKindRPCClient.Set(span)
+		ext.PeerService.Set(span, "mongodb")
+		span.SetTag("database", collection.Database.Name())
+		span.SetTag("table", collection.Table.Name())
+		span.SetTag("method", "Count")
+		span.SetTag("filter", collection.filter)
+		defer span.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, span)
+	}
+	ct, _ := context.WithTimeout(ctx, 5*time.Second)
+	result, err = collection.Table.CountDocuments(ct, collection.filter)
 	if err != nil {
 		collection.reset()
 		return
