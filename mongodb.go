@@ -15,12 +15,15 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+//Log 日志
 var Log Logger
 
+//SetLogger 设置日志
 func (configs *Configs) SetLogger(logger Logger) {
 	Log = logger
 }
 
+//Logger 日志接口
 type Logger interface {
 	Panic(args ...interface{})
 	Fatal(args ...interface{})
@@ -32,13 +35,13 @@ type Logger interface {
 	Trace(args ...interface{})
 }
 
+//MongoDBClient 连接
 type MongoDBClient struct {
 	Client *mongo.Client
 	Name   string
 }
 
-// var client *mongo.Client
-
+//collection *mongo.Client
 type collection struct {
 	Database *mongo.Database
 	Table    *mongo.Collection
@@ -49,7 +52,7 @@ type collection struct {
 	fields   bson.M
 }
 
-//Config .
+//Opt 配置
 type Opt struct {
 	Url             string
 	MaxConnIdleTime int
@@ -65,7 +68,7 @@ type Configs struct {
 	mu          sync.RWMutex
 }
 
-//Default ..
+//Default 构造
 func Default() *Configs {
 	return &Configs{
 		opt:         make(map[string]*Opt),
@@ -175,6 +178,10 @@ func (collection *collection) Fields(fields bson.M) *collection {
 //CreateOneIndex 创建单个普通索引
 func (collection *collection) CreateIndex(ctx context.Context, key bson.D, op *options.IndexOptions) (res string, err error) {
 
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
 		parentCtx := parentSpan.Context()
 		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
@@ -200,6 +207,9 @@ func (collection *collection) CreateIndex(ctx context.Context, key bson.D, op *o
 //ListIndexes 获取所有所有
 func (collection *collection) ListIndexes(ctx context.Context, opts *options.ListIndexesOptions) (interface{}, error) {
 	var results interface{}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
 		parentCtx := parentSpan.Context()
@@ -234,6 +244,9 @@ func (collection *collection) ListIndexes(ctx context.Context, opts *options.Lis
 //DropIndex 删除索引
 func (collection *collection) DropIndex(ctx context.Context, name string, opts *options.DropIndexesOptions) error {
 	indexView := collection.Table.Indexes()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
 		parentCtx := parentSpan.Context()
@@ -261,6 +274,9 @@ func (collection *collection) DropIndex(ctx context.Context, name string, opts *
 // 写入单条数据
 func (collection *collection) InsertOne(ctx context.Context, document interface{}) (*mongo.InsertOneResult, error) {
 	var data interface{}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	data = BeforeCreate(document)
 	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
 		parentCtx := parentSpan.Context()
@@ -284,6 +300,9 @@ func (collection *collection) InsertOne(ctx context.Context, document interface{
 // 写入多条数据
 func (collection *collection) InsertMany(ctx context.Context, documents interface{}) (*mongo.InsertManyResult, error) {
 	var data []interface{}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	data = BeforeCreate(documents).([]interface{})
 	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
 		parentCtx := parentSpan.Context()
@@ -297,13 +316,16 @@ func (collection *collection) InsertMany(ctx context.Context, documents interfac
 		defer span.Finish()
 		ctx = opentracing.ContextWithSpan(ctx, span)
 	}
-	ct, _ := context.WithTimeout(ctx, 5*time.Second)
-	result, err := collection.Table.InsertMany(ct, data)
+	ctx, _ = context.WithTimeout(ctx, 5*time.Second)
+	result, err := collection.Table.InsertMany(ctx, data)
 	collection.reset()
 	return result, err
 }
 
 func (collection *collection) Aggregate(ctx context.Context, pipeline interface{}, result interface{}) (err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
 		parentCtx := parentSpan.Context()
 		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
@@ -316,13 +338,13 @@ func (collection *collection) Aggregate(ctx context.Context, pipeline interface{
 		defer span.Finish()
 		ctx = opentracing.ContextWithSpan(ctx, span)
 	}
-	ct, _ := context.WithTimeout(ctx, 5*time.Second)
+	ctx, _ = context.WithTimeout(ctx, 5*time.Second)
 	cursor, err := collection.Table.Aggregate(ctx, pipeline)
 	if err != nil {
 		collection.reset()
 		return
 	}
-	err = cursor.All(ct, result)
+	err = cursor.All(ctx, result)
 	if err != nil {
 		collection.reset()
 		return
@@ -333,6 +355,9 @@ func (collection *collection) Aggregate(ctx context.Context, pipeline interface{
 
 // 存在更新,不存在写入, documents 里边的文档需要有 _id 的存在
 func (collection *collection) UpdateOrInsert(ctx context.Context, documents []interface{}) (*mongo.UpdateResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
 		parentCtx := parentSpan.Context()
 		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
@@ -345,9 +370,9 @@ func (collection *collection) UpdateOrInsert(ctx context.Context, documents []in
 		defer span.Finish()
 		ctx = opentracing.ContextWithSpan(ctx, span)
 	}
-	ct, _ := context.WithTimeout(ctx, 5*time.Second)
+	ctx, _ = context.WithTimeout(ctx, 5*time.Second)
 	var upsert = true
-	result, err := collection.Table.UpdateMany(ct, collection.filter, documents, &options.UpdateOptions{Upsert: &upsert})
+	result, err := collection.Table.UpdateMany(ctx, collection.filter, documents, &options.UpdateOptions{Upsert: &upsert})
 	collection.reset()
 	return result, err
 }
@@ -355,6 +380,9 @@ func (collection *collection) UpdateOrInsert(ctx context.Context, documents []in
 //
 func (collection *collection) UpdateOne(ctx context.Context, document interface{}) (*mongo.UpdateResult, error) {
 	var update bson.M
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	update = bson.M{"$set": BeforeUpdate(document)}
 	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
 		parentCtx := parentSpan.Context()
@@ -369,8 +397,8 @@ func (collection *collection) UpdateOne(ctx context.Context, document interface{
 		defer span.Finish()
 		ctx = opentracing.ContextWithSpan(ctx, span)
 	}
-	ct, _ := context.WithTimeout(ctx, 5*time.Second)
-	result, err := collection.Table.UpdateOne(ct, collection.filter, update)
+	ctx, _ = context.WithTimeout(ctx, 5*time.Second)
+	result, err := collection.Table.UpdateOne(ctx, collection.filter, update)
 
 	collection.reset()
 	return result, err
@@ -378,6 +406,9 @@ func (collection *collection) UpdateOne(ctx context.Context, document interface{
 
 //原生update
 func (collection *collection) UpdateOneRaw(ctx context.Context, document interface{}, opt ...*options.UpdateOptions) (*mongo.UpdateResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
 		parentCtx := parentSpan.Context()
 		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
@@ -391,15 +422,17 @@ func (collection *collection) UpdateOneRaw(ctx context.Context, document interfa
 		defer span.Finish()
 		ctx = opentracing.ContextWithSpan(ctx, span)
 	}
-	ct, _ := context.WithTimeout(ctx, 5*time.Second)
-	result, err := collection.Table.UpdateOne(ct, collection.filter, document, opt...)
+	ctx, _ = context.WithTimeout(ctx, 5*time.Second)
+	result, err := collection.Table.UpdateOne(ctx, collection.filter, document, opt...)
 	collection.reset()
 	return result, err
 }
 
 //
 func (collection *collection) UpdateMany(ctx context.Context, document interface{}) (*mongo.UpdateResult, error) {
-
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	var update bson.M
 	update = bson.M{"$set": BeforeUpdate(document)}
 	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
@@ -415,8 +448,8 @@ func (collection *collection) UpdateMany(ctx context.Context, document interface
 		defer span.Finish()
 		ctx = opentracing.ContextWithSpan(ctx, span)
 	}
-	ct, _ := context.WithTimeout(ctx, 5*time.Second)
-	result, err := collection.Table.UpdateMany(ct, collection.filter, update)
+	ctx, _ = context.WithTimeout(ctx, 5*time.Second)
+	result, err := collection.Table.UpdateMany(ctx, collection.filter, update)
 
 	collection.reset()
 	return result, err
@@ -424,6 +457,9 @@ func (collection *collection) UpdateMany(ctx context.Context, document interface
 
 // 查询一条数据
 func (collection *collection) FindOne(ctx context.Context, document interface{}) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
 		parentCtx := parentSpan.Context()
 		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
@@ -439,8 +475,8 @@ func (collection *collection) FindOne(ctx context.Context, document interface{})
 		defer span.Finish()
 		ctx = opentracing.ContextWithSpan(ctx, span)
 	}
-	ct, _ := context.WithTimeout(ctx, 5*time.Second)
-	result := collection.Table.FindOne(ct, collection.filter, &options.FindOneOptions{
+	ctx, _ = context.WithTimeout(ctx, 5*time.Second)
+	result := collection.Table.FindOne(ctx, collection.filter, &options.FindOneOptions{
 		Skip:       &collection.skip,
 		Sort:       collection.sort,
 		Projection: collection.fields,
@@ -456,6 +492,9 @@ func (collection *collection) FindOne(ctx context.Context, document interface{})
 
 // 查询多条数据
 func (collection *collection) FindMany(ctx context.Context, documents interface{}) (err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
 		parentCtx := parentSpan.Context()
 		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
@@ -472,8 +511,8 @@ func (collection *collection) FindMany(ctx context.Context, documents interface{
 		defer span.Finish()
 		ctx = opentracing.ContextWithSpan(ctx, span)
 	}
-	ct, _ := context.WithTimeout(ctx, 5*time.Second)
-	result, err := collection.Table.Find(ct, collection.filter, &options.FindOptions{
+	ctx, _ = context.WithTimeout(ctx, 5*time.Second)
+	result, err := collection.Table.Find(ctx, collection.filter, &options.FindOptions{
 		Skip:       &collection.skip,
 		Limit:      &collection.limit,
 		Sort:       collection.sort,
@@ -483,7 +522,7 @@ func (collection *collection) FindMany(ctx context.Context, documents interface{
 		collection.reset()
 		return
 	}
-	defer result.Close(ct)
+	defer result.Close(ctx)
 	val := reflect.ValueOf(documents)
 	if val.Kind() != reflect.Ptr || val.Elem().Kind() != reflect.Slice {
 		err = errors.New("result argument must be a slice address")
@@ -493,7 +532,7 @@ func (collection *collection) FindMany(ctx context.Context, documents interface{
 
 	slice := reflect.MakeSlice(val.Elem().Type(), 0, 0)
 	itemTyp := val.Elem().Type().Elem()
-	for result.Next(ct) {
+	for result.Next(ctx) {
 		item := reflect.New(itemTyp)
 		err := result.Decode(item.Interface())
 		if err != nil {
@@ -511,6 +550,9 @@ func (collection *collection) FindMany(ctx context.Context, documents interface{
 
 // 删除数据,并返回删除成功的数量
 func (collection *collection) Delete(ctx context.Context) (count int64, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
 		parentCtx := parentSpan.Context()
 		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
@@ -530,8 +572,8 @@ func (collection *collection) Delete(ctx context.Context) (count int64, err erro
 		return
 	}
 
-	ct, _ := context.WithTimeout(ctx, 5*time.Second)
-	result, err := collection.Table.DeleteMany(ct, collection.filter)
+	ctx, _ = context.WithTimeout(ctx, 5*time.Second)
+	result, err := collection.Table.DeleteMany(ctx, collection.filter)
 	if err != nil {
 		collection.reset()
 		return
@@ -542,6 +584,9 @@ func (collection *collection) Delete(ctx context.Context) (count int64, err erro
 }
 
 func (collection *collection) Drop(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
 		parentCtx := parentSpan.Context()
 		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
@@ -553,12 +598,15 @@ func (collection *collection) Drop(ctx context.Context) error {
 		defer span.Finish()
 		ctx = opentracing.ContextWithSpan(ctx, span)
 	}
-	ct, _ := context.WithTimeout(ctx, 5*time.Second)
-	err := collection.Table.Drop(ct)
+	ctx, _ = context.WithTimeout(ctx, 5*time.Second)
+	err := collection.Table.Drop(ctx)
 	return err
 }
 
 func (collection *collection) Count(ctx context.Context) (result int64, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if parentSpan := opentracing.SpanFromContext(ctx); parentSpan != nil {
 		parentCtx := parentSpan.Context()
 		span := opentracing.StartSpan("mongodb", opentracing.ChildOf(parentCtx))
@@ -571,8 +619,8 @@ func (collection *collection) Count(ctx context.Context) (result int64, err erro
 		defer span.Finish()
 		ctx = opentracing.ContextWithSpan(ctx, span)
 	}
-	ct, _ := context.WithTimeout(ctx, 5*time.Second)
-	result, err = collection.Table.CountDocuments(ct, collection.filter)
+	ctx, _ = context.WithTimeout(ctx, 5*time.Second)
+	result, err = collection.Table.CountDocuments(ctx, collection.filter)
 	if err != nil {
 		collection.reset()
 		return
